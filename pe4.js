@@ -2,9 +2,9 @@
 *
 *
 *   P1X, Krzysztof Jankowski
-*   Untitled
+*   You Are Bacteria
 *
-*   abstract: Game for the Ludum Dare 30 hackathon, 48h
+*   abstract: Zero-player game game for the Ludum Dare 30 hackathon, 48h
 *   engine: P1X Engine V4
 *   created: 23-08-2014
 *   license: do what you want and dont bother me
@@ -239,9 +239,19 @@ Gui.prototype.draw_pointer = function(){
     );
 };
 Gui.prototype.draw_bacteria_brain = function(){
-    width = game.settings.brain_size + 2;
-    height = game.settings.brain_size + 2;
+    var i,x,y,tile, width, height;
 
+    width = game.settings.brain.size + 2;
+    height = game.settings.brain.size + 2;
+
+    for (i = 0; i < 6; i++) {
+        game.gfx.put_tile({
+            layer: this.layer-1,
+            id: 16+i,
+            x: ( ((width-5)*0.5)<<0 ) + game.settings.brain.pos.x + i,
+            y: game.settings.brain.pos.y-1
+        });
+    };
     for (x = 0; x < width; x++) {
         for (y = 0; y < height; y++) {
             if(y===0){
@@ -264,14 +274,21 @@ Gui.prototype.draw_bacteria_brain = function(){
                 game.gfx.put_tile({
                     layer: this.layer-1,
                     id:tile,
-                    x: x + 1,
-                    y: y + 1
+                    x: game.settings.brain.pos.x + x,
+                    y: game.settings.brain.pos.y + y
                 });
             }
         }
     }
 };
-
+Gui.prototype.draw_pause = function(){
+    game.gfx.put_tile({
+        layer: this.layer,
+        id: game.pause ? 22 : 23,
+        x: game.world.width-2,
+        y: 1
+    });
+}
 /*
 *
 *   input function
@@ -349,17 +366,54 @@ var Entity = function(params){
 };
 Entity.prototype.gol_init = function(params){
     var x, y, r;
-    this.brain = [game.settings.brain_size];
-    for (x = 0; x < game.settings.brain_size; x++) {
-        this.brain[x] = [game.settings.brain_size];
-        for (y = 0; y < game.settings.brain_size; y++) {
-            r = (Math.random()<game.settings.brain_population) ? true : false;
+    this.brain = [game.settings.brain.size];
+    for (x = 0; x < game.settings.brain.size; x++) {
+        this.brain[x] = [game.settings.brain.size];
+        for (y = 0; y < game.settings.brain.size; y++) {
+            r = (Math.random()<game.settings.brain.init_populaton) ? true : false;
             this.brain[x][y] = r;
         };
     };
 };
 Entity.prototype.gol = function(params){
+    var temp = [game.settings.brain.size],
+        x,y,n;
 
+    if(this.last_move < game.timer){
+        for (x = 0; x < game.settings.brain.size; x++) {
+            temp[x] = [game.settings.brain.size];
+            for (y = 0; y < game.settings.brain.size; y++) {
+                n = 0;
+
+                temp[x][y] = false;
+
+                if(this.brain[x-1] && this.brain[x-1][y-1]) n++;
+                if(this.brain[x+1] && this.brain[x+1][y-1]) n++;
+
+                if(this.brain[x][y-1]) n++;
+                if(this.brain[x][y+1]) n++;
+                if(this.brain[x-1] && this.brain[x-1][y]) n++;
+                if(this.brain[x+1] && this.brain[x+1][y]) n++;
+
+                if(this.brain[x-1] && this.brain[x-1][y+1]) n++;
+                if(this.brain[x+1] && this.brain[x+1][y+1]) n++;
+
+                // Conway's Game of Life Rules
+                if(this.brain[x][y] && n<2) temp[x][y] = false;
+                if(this.brain[x][y] && n===2 || n===3) temp[x][y] = true;
+                if(!this.brain[x][y] && n===3) temp[x][y] = true;
+                if(this.brain[x][y] && n>3) temp[x][y] = false;
+            };
+        };
+
+        for (x = 0; x < game.settings.brain.size; x++) {
+            for (y = 0; y < game.settings.brain.size; y++) {
+                this.brain[x][y] = temp[x][y] ? true : false;
+            };
+        };
+
+        game.gfx.layers[2].render = true;
+    }
 };
 Entity.prototype.distance_to = function(params){
     var xs = 0;
@@ -447,8 +501,14 @@ var game = {
         water_animates: 36,
         conversation_time: 30,
         max_distance: 0,
-        brain_size: 10,
-        brain_population: 0.3
+        brain:{
+            size: 6,
+            init_populaton: 0.3,
+            pos: {
+                x: 2,
+                y: 2
+            }
+        }
     },
 
     world: {
@@ -463,6 +523,7 @@ var game = {
     },
 
     selected_bacteria: false,
+    pause: true,
 
     /*
     *   init the engine
@@ -517,14 +578,14 @@ var game = {
             }));
         };
 
-        for (var i = 0; i < 3; i++) {
+        /*for (var i = 0; i < 3; i++) {
             this.world.entities.push(new Entity({
                 good: false,
                 sprites: [3,4],
                 x: game.world.center.x + ( -8 + (Math.random()*16)<<0),
                 y: game.world.center.y + (-8 + (Math.random()*16)<<0)
             }));
-        };
+        };*/
     },
 
     select_bacteria: function(){
@@ -535,10 +596,17 @@ var game = {
             };
         if(
             this.selected_bacteria &&
-            p.x > 1 && p.x < game.settings.brain_size+2 &&
-            p.y > 1 && p.y < game.settings.brain_size+2
+            p.x > game.settings.brain.pos.x &&
+            p.x < game.settings.brain.pos.x + game.settings.brain.size + 1 &&
+            p.y > game.settings.brain.pos.y &&
+            p.y < game.settings.brain.pos.y + game.settings.brain.size + 1
         ){
-            this.selected_bacteria.brain[p.x-2][p.y-2] = !this.selected_bacteria.brain[p.x-2][p.y-2];
+            p.x = p.x - game.settings.brain.pos.x - 1
+            p.y = p.y - game.settings.brain.pos.y - 1
+            this.selected_bacteria.brain[p.x][p.y] = !this.selected_bacteria.brain[p.x][p.y];
+        }else
+        if(p.x == this.world.width - 2 && p.y === 1){
+            this.pause = !this.pause;
         }else{
             this.selected_bacteria = false;
             for (entity in this.world.entities) {
@@ -573,7 +641,10 @@ var game = {
 
                 for (entity in this.world.entities) {
                     e = this.world.entities[entity];
-                    e.move();
+                    if(!this.pause){
+                        e.gol();
+                        e.move();
+                    }
                     e.animate();
                 };
 
@@ -637,13 +708,13 @@ var game = {
                     if(this.gfx.layers[2].render){
                         this.gfx.clear(2);
                         this.gui.draw_bacteria_brain();
-                        for (x = 0; x < game.settings.brain_size; x++) {
-                            for (y = 0; y < game.settings.brain_size; y++) {
+                        for (x = 0; x < game.settings.brain.size; x++) {
+                            for (y = 0; y < game.settings.brain.size; y++) {
                                 game.gfx.put_tile({
                                     layer: 2,
-                                    id:this.selected_bacteria.brain[x][y] ? 18 : 14,
-                                    x: x + 2,
-                                    y: y + 2
+                                    id:this.selected_bacteria.brain[x][y] ? 15 : 14,
+                                    x: x + this.settings.brain.pos.x + 1,
+                                    y: y + this.settings.brain.pos.y + 1
                                 })
                             }
                         }
@@ -653,6 +724,7 @@ var game = {
                     this.gfx.clear(2);
                 }
 
+                this.gui.draw_pause();
                 this.gui.draw_fps();
                 this.gui.draw_logo({x:5,y:this.world.height-2});
             break;
