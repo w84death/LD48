@@ -239,28 +239,20 @@ Gui.prototype.draw_pointer = function(){
     );
 };
 Gui.prototype.draw_bacteria_brain = function(){
-    var ctx = game.gfx.layers[this.layer].ctx,
-        x,y,width,height;
-
     width = game.settings.brain_size + 2;
-    height = game.settings.brain_size + 3;
+    height = game.settings.brain_size + 2;
 
     for (x = 0; x < width; x++) {
         for (y = 0; y < height; y++) {
             if(y===0){
-                if(x===0) tile = 15;
-                if(x===width-1) tile = 17;
-                if(x>0 && x<width-1) tile = 16;
-            }
-            if(y===1){
                 if(x===0) tile = 6;
                 if(x===width-1) tile = 8;
                 if(x>0 && x<width-1) tile = 7;
             }
-            if(height > 2 && y>1){
+            if(height > 2 && y>0){
                 if(x===0) tile = 9;
                 if(x===width-1) tile = 10;
-                if(x>0 && x<width-1) tile = 14;
+                if(x>0 && x<width-1) tile = false;
             }
             if(y===height-1){
                 if(x===0) tile = 11;
@@ -268,35 +260,16 @@ Gui.prototype.draw_bacteria_brain = function(){
                 if(x>0 && x<width-1) tile = 13;
             }
 
-            game.gfx.put_tile({
-                layer: this.layer,
-                id:tile,
-                x: x + 1,
-                y: y + 1
-            })
+            if(tile){
+                game.gfx.put_tile({
+                    layer: this.layer-1,
+                    id:tile,
+                    x: x + 1,
+                    y: y + 1
+                });
+            }
         }
     }
-
-    for (x = 0; x < game.settings.brain_size; x++) {
-        for (y = 0; y < game.settings.brain_size; y++) {
-            game.gfx.put_tile({
-                layer: this.layer,
-                id:18,
-                x: x + 2,
-                y: y + 3
-            })
-        }
-    }
-
-    ctx.fillStyle = '#b2dcef';
-    ctx.font = "900 9px 'Source Code Pro', monospace,serif";
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'center';
-    ctx.fillText(
-        (game.selected_bacteria.good ? 'GOOD' : 'BAD') + ' BACTERIA',
-        6 + ((width*0.5)<<0 )* game.gfx.screen.sprite_size,
-        9
-    );
 };
 
 /*
@@ -371,9 +344,19 @@ var Entity = function(params){
     };
     this.last_move = game.timer;
     this.distance = 0;
+    this.brain = [];
+    this.gol_init();
 };
 Entity.prototype.gol_init = function(params){
-
+    var x, y, r;
+    this.brain = [game.settings.brain_size];
+    for (x = 0; x < game.settings.brain_size; x++) {
+        this.brain[x] = [game.settings.brain_size];
+        for (y = 0; y < game.settings.brain_size; y++) {
+            r = (Math.random()<game.settings.brain_population) ? true : false;
+            this.brain[x][y] = r;
+        };
+    };
 };
 Entity.prototype.gol = function(params){
 
@@ -429,6 +412,7 @@ Entity.prototype.move = function(){
             x:game.world.center.x,
             y:game.world.center.y
         });
+        game.gfx.layers[1].render = true;
     }
 
 };
@@ -439,6 +423,7 @@ Entity.prototype.animate = function(){
             this.frame = 0;
         }
         this.frame_counter = 0;
+        game.gfx.layers[1].render = true;
     }
 };
 
@@ -462,7 +447,8 @@ var game = {
         water_animates: 36,
         conversation_time: 30,
         max_distance: 0,
-        brain_size: 12,
+        brain_size: 10,
+        brain_population: 0.3
     },
 
     world: {
@@ -542,18 +528,29 @@ var game = {
     },
 
     select_bacteria: function(){
-        var entity, e;
-        this.selected_bacteria = false;
-
-        for (entity in this.world.entities) {
-            e = this.world.entities[entity];
-            e.selected = false;
-            if(e.pos.x === (this.input.pointer.pos.x/this.gfx.screen.sprite_size/this.gfx.screen.scale)<<0 &&
-                e.pos.y === (this.input.pointer.pos.y/this.gfx.screen.sprite_size/this.gfx.screen.scale)<<0){
-                    e.selected = true;
-                    this.selected_bacteria = e;
-            }
-        };
+        var entity, e,
+            p = {
+                x: (this.input.pointer.pos.x/this.gfx.screen.sprite_size/this.gfx.screen.scale)<<0,
+                y: (this.input.pointer.pos.y/this.gfx.screen.sprite_size/this.gfx.screen.scale)<<0
+            };
+        if(
+            this.selected_bacteria &&
+            p.x > 1 && p.x < game.settings.brain_size+2 &&
+            p.y > 1 && p.y < game.settings.brain_size+2
+        ){
+            this.selected_bacteria.brain[p.x-2][p.y-2] = !this.selected_bacteria.brain[p.x-2][p.y-2];
+        }else{
+            this.selected_bacteria = false;
+            for (entity in this.world.entities) {
+                e = this.world.entities[entity];
+                e.selected = false;
+                if(e.pos.x === p.x && e.pos.y === p.y ){
+                        e.selected = true;
+                        this.selected_bacteria = e;
+                }
+            };
+        }
+        this.gfx.layers[2].render = true;
     },
 
     update: function(delta_time){
@@ -615,27 +612,45 @@ var game = {
                 this.gui.draw_intro();
             break;
             case 'game':
-                this.gfx.clear(2);
-                for (entity in this.world.entities) {
-                    e = this.world.entities[entity];
-                    this.gfx.put_tile({
-                        layer:2,
-                        id:e.sprites[e.frame],
-                        x:e.pos.x * this.gfx.screen.sprite_size,
-                        y:e.pos.y * this.gfx.screen.sprite_size,
-                        pixel_perfect:true
-                    });
-                    if(e.selected){
+                if(this.gfx.layers[1].render){
+                    this.gfx.clear(1);
+                    for (entity in this.world.entities) {
+                        e = this.world.entities[entity];
                         this.gfx.put_tile({
-                            layer:3,
-                            id:5,
-                            x:e.pos.x,y:e.pos.y
+                            layer:1,
+                            id:e.sprites[e.frame],
+                            x:e.pos.x * this.gfx.screen.sprite_size,
+                            y:e.pos.y * this.gfx.screen.sprite_size,
+                            pixel_perfect:true
                         });
-                    }
-                };
-
+                        if(e.selected){
+                            this.gfx.put_tile({
+                                layer:this.gui.layer,
+                                id:5,
+                                x:e.pos.x,y:e.pos.y
+                            });
+                        }
+                    };
+                    this.gfx.layers[1].render = true;
+                }
                 if(this.selected_bacteria){
-                    this.gui.draw_bacteria_brain();
+                    if(this.gfx.layers[2].render){
+                        this.gfx.clear(2);
+                        this.gui.draw_bacteria_brain();
+                        for (x = 0; x < game.settings.brain_size; x++) {
+                            for (y = 0; y < game.settings.brain_size; y++) {
+                                game.gfx.put_tile({
+                                    layer: 2,
+                                    id:this.selected_bacteria.brain[x][y] ? 18 : 14,
+                                    x: x + 2,
+                                    y: y + 2
+                                })
+                            }
+                        }
+                        this.gfx.layers[2].render = false;
+                    }
+                }else{
+                    this.gfx.clear(2);
                 }
 
                 this.gui.draw_fps();
