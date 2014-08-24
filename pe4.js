@@ -229,6 +229,42 @@ Gui.prototype.draw_intro = function(params){
         );
     }
 };
+Gui.prototype.draw_game_over = function(){
+    var ctx = game.gfx.layers[this.layer].ctx;
+
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = "900 11px 'Source Code Pro', monospace,serif";
+    ctx.strokeStyle = '#fff';
+
+    ctx.drawImage(game.gfx.sprites.logo,
+        (game.gfx.screen.width*0.5 << 0)-(game.gfx.sprites.logo.width*0.5),
+        ((game.gfx.screen.height*0.5 << 0)-(game.gfx.sprites.logo.height*0.5))-20
+    );
+
+    ctx.beginPath();
+    ctx.moveTo(24,(game.gfx.screen.height*0.5 << 0));
+    ctx.lineTo(game.gfx.screen.width-24,(game.gfx.screen.height*0.5 << 0));
+    ctx.stroke();
+
+    ctx.fillText('GAME OVER',
+        game.gfx.screen.width*0.5 << 0,
+        (game.gfx.screen.height*0.5 << 0)+18
+    );
+
+    ctx.beginPath();
+    ctx.moveTo(24,(game.gfx.screen.height*0.5 << 0) + 36);
+    ctx.lineTo(game.gfx.screen.width-24,(game.gfx.screen.height*0.5 << 0) + 36);
+    ctx.stroke();
+
+    if(game.timer % 2 == 1){
+        ctx.fillText('CLICK TO START',
+            game.gfx.screen.width*0.5 << 0,
+            (game.gfx.screen.height*0.5 << 0) + 54
+        );
+    }
+};
 Gui.prototype.draw_fps = function(){
     var ctx = game.gfx.layers[this.layer].ctx;
     ctx.fillStyle = '#000';
@@ -415,7 +451,100 @@ Gui.prototype.draw_aside = function(){
         game.gfx.screen.sprite_size * (x + 1),
         game.gfx.screen.sprite_size * (y + 3)
     );
+};
 
+
+/*
+*
+*   Messages / conversations / tutorials
+*
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+Messages = function(){
+    this.layer = null;
+    this.bubbles = [];
+};
+Messages.prototype.init = function(params){
+    this.layer = params.layer;
+};
+Messages.prototype.draw_message = function(params){
+    var ctx = game.gfx.layers[this.layer].ctx,
+        tile = 0, corner = {}, max_len = 0, len = 0,
+        width, height, i,x,y;
+
+    for (i = 0; i < params.msg.length; i++) {
+        len = params.msg[i].length;
+        if(len > max_len) max_len = len;
+    };
+
+    width = (((max_len/7.5)*4.8)<<0 )+1;
+    height = i+1;
+    if(width<2) width = 2;
+
+    corner = {
+        x: params.x - width,
+        y: params.y - height + 1
+    };
+
+    game.gui.draw_box({
+        layer: this.layer,
+        width: width,
+        height: height,
+        x: corner.x,
+        y: corner.y,
+        sprites: [
+            25,26,27,
+            26,26,28,
+            29,30,31
+        ]
+    });
+
+    ctx.fillStyle = '#000';
+    ctx.font = "900 8px 'Source Code Pro', monospace,serif";
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    for (var i = 0; i < params.msg.length; i++) {
+        ctx.fillText(params.msg[i],
+            corner.x*game.gfx.screen.sprite_size + 3,
+            (corner.y+i)*game.gfx.screen.sprite_size + 2
+        );
+    };
+};
+Messages.prototype.add_conversation = function(params){
+    for (var i = 0; i < params.bubbles.length; i++) {
+        this.bubbles.push({
+            msg: params.bubbles[i],
+            pos: {
+                x:params.pos.x,
+                y:params.pos.y
+            },
+            delay: i===0 ? params.delay || false : false,
+            time: game.settings.conversation_time
+        });
+    };
+};
+Messages.prototype.draw_conversation = function(){
+    var msg;
+
+    if(this.bubbles.length > 0){
+        bubble = this.bubbles[0];
+        if(bubble.delay && bubble.delay < 0){
+            if(bubble.time < 0){
+                this.draw_message({
+                    msg: bubble.msg,
+                    x: bubble.pos.x,
+                    y: bubble.pos.y
+                });
+                if(game.input.pointer.enable){
+                    this.bubbles.splice(0,1);
+                }
+            }else{
+                bubble.time--;
+            }
+        }else{
+            bubble.delay--;
+        }
+    }
 };
 
 /*
@@ -600,6 +729,13 @@ Entity.prototype.brain_interpreter = function(params){
     if(params.live_cells === 0){
         this.life = false;
         this.sprites = [3,3];
+        game.moog.play({
+            freq: 100,
+            attack: 10,
+            decay: 400,
+            oscilator: 3,
+            vol: 0.2
+        });
     }
 
     if(params.changed > 0){
@@ -613,6 +749,13 @@ Entity.prototype.brain_interpreter = function(params){
             x: this.pos.x,
             y: this.pos.y
         }));
+        game.moog.play({
+            freq: 220,
+            attack: 80,
+            decay: 400,
+            oscilator: 3,
+            vol: 0.2
+        });
     }
 };
 Entity.prototype.distance_to = function(params){
@@ -702,6 +845,7 @@ var game = {
     gui: new Gui(),
     input: new Input(),
     moog: new Moog(),
+    messages: new Messages(),
 
     fps: 0,
     state: 'loading',
@@ -734,6 +878,7 @@ var game = {
     brain_cells: 10,
     selected_bacteria: false,
     pause: true,
+    tutorial: true,
 
     /*
     *   init the engine
@@ -756,17 +901,18 @@ var game = {
         // init game timer
         window.setInterval(game.inc_timer,500);
 
-        // graphics init
         this.gfx.init({
             layers: 4
         });
 
-        // gui init
         this.gui.init({
+            layer: 3
+        });
+
+        this.messages.init({
             layer: 3
         })
 
-        // mouse events
         this.input.init();
 
     },
@@ -788,6 +934,8 @@ var game = {
     },
 
     new_game: function(){
+        var x, y;
+
         for (var i = 0; i < 3; i++) {
             this.world.entities.push(new Entity({
                 life: true,
@@ -796,6 +944,103 @@ var game = {
                 y: game.world.center.y + (-8 + (Math.random()*16)<<0)
             }));
         };
+
+        if(this.tutorial){
+            x = game.world.center.x + 4;
+            y = game.world.center.y - 2;
+            this.world.entities.push(new Entity({
+                life: true,
+                sprites: [1,2],
+                x: x,
+                y: y
+            }));
+
+
+            this.messages.add_conversation({
+                bubbles: [
+
+                    ['Welcome!',
+                    'I\'m a bacteria.'],
+
+                    ['You can program my brain',
+                    'by simple binary rules.'],
+
+                    ['Select one of us.'],
+
+                    ['Brain works as a ',
+                    'Conway\'s Game of Life.',
+                    'Google it\'s rules.'],
+
+                    ['You can add new cells',
+                    'thus modify the brain.'],
+
+                    ['Lot of active cells will',
+                    'result in multiply and new',
+                    'bacteria will show.'],
+
+                    ['If there is no active cell',
+                    'I will die shortly :('],
+
+                    ['Movement in brain cause my',
+                    'movement in this enviroment.'],
+                ],
+                pos: {
+                    x: x,
+                    y: y
+                },
+                delay: 10
+            });
+
+            this.messages.add_conversation({
+                bubbles: [
+                    ['Here You can start the game.',
+                    'Or pause it any time.']
+                ],
+                pos: {
+                    x: this.world.width - 3,
+                    y: 2,
+                },
+                delay: 50
+            });
+
+            this.messages.add_conversation({
+                bubbles: [
+                    ['Here You can see how many',
+                    'bacterias are alive.']
+                ],
+                pos: {
+                    x: this.world.width - 5,
+                    y: 3,
+                },
+                delay: 10
+            });
+
+            this.messages.add_conversation({
+                bubbles: [
+                    ['Here are cells You can use',
+                    'to program bacteria\'s brains.',
+                    'Each 10 turns You\'ll gain new cell.']
+                ],
+                pos: {
+                    x: this.world.width - 5,
+                    y: 4,
+                },
+                delay: 10
+            });
+
+            this.messages.add_conversation({
+                bubbles: [
+                    ['Let\s play!']
+                ],
+                pos: {
+                    x: x,
+                    y: y
+                },
+                delay: 10
+            });
+
+            this.tutorial = false;
+        }
     },
 
     count_bacterias: function(){
@@ -922,6 +1167,13 @@ var game = {
                     e.animate();
                 };
 
+                if(this.count_bacterias() === 0){
+                    this.world.entities = [];
+                    this.gfx.layers[1].render = true;
+                    this.pause = true;
+                    this.state = 'game_over';
+                }
+
             break;
             case 'game_over':
                 if(this.input.pointer.enable){
@@ -1017,8 +1269,10 @@ var game = {
                 this.gui.draw_buttons();
                 this.gui.draw_fps();
                 this.gui.draw_logo({x:5,y:this.world.height-2});
+                this.messages.draw_conversation();
             break;
             case 'game_over':
+                this.gui.draw_game_over();
             break;
         }
         this.gui.draw_pointer();
