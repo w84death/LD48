@@ -474,6 +474,47 @@ Input.prototype.track_pointer = function(e){
 
 /*
 *
+*   sound generation
+*
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+
+Moog = function(){
+    this.audio = new (window.AudioContext || window.webkitAudioContext)();
+};
+Moog.prototype.play = function(params){
+    if(params.pause) return;
+    var vol = params.vol || 0.2,
+        attack = params.attack || 20,
+        decay = params.decay || 300,
+        freq = params.freq || 30,
+        oscilator = params.oscilator || 0;
+        gain = this.audio.createGain(),
+        osc = this.audio.createOscillator();
+
+    // GAIN
+    gain.connect(this.audio.destination);
+    gain.gain.setValueAtTime(0, this.audio.currentTime);
+    gain.gain.linearRampToValueAtTime(params.vol, this.audio.currentTime + attack / 1000);
+    gain.gain.linearRampToValueAtTime(0, this.audio.currentTime + decay / 1000);
+
+    // OSC
+    osc.frequency.value = freq;
+    osc.type = oscilator; //"square";
+    osc.connect(gain);
+
+    // START
+    osc.start(0);
+
+    setTimeout(function() {
+        osc.stop(0);
+        osc.disconnect(gain);
+        gain.disconnect(game.moog.audio.destination);
+    }, decay)
+};
+
+/*
+*
 *   entities
 *
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -506,7 +547,7 @@ Entity.prototype.gol_init = function(params){
 };
 Entity.prototype.gol = function(params){
     var temp = [game.settings.brain.size],
-        x,y,n;
+        x,y,n, changed,live_cells;
 
     if(this.last_move < game.timer){
         for (x = 0; x < game.settings.brain.size; x++) {
@@ -535,13 +576,43 @@ Entity.prototype.gol = function(params){
             };
         };
 
+        changed = 0;
+        live_cells = 0;
         for (x = 0; x < game.settings.brain.size; x++) {
             for (y = 0; y < game.settings.brain.size; y++) {
+                if(this.brain[x][y] !== temp[x][y]) changed++;
                 this.brain[x][y] = temp[x][y] ? true : false;
+                if(this.brain[x][y]){
+                    live_cells++;
+                }
             };
         };
 
+        this.brain_interpreter({
+            changed: changed,
+            live_cells: live_cells
+        });
+
         game.gfx.layers[2].render = true;
+    }
+};
+Entity.prototype.brain_interpreter = function(params){
+    if(params.live_cells === 0){
+        this.life = false;
+        this.sprites = [3,3];
+    }
+
+    if(params.changed > 0){
+        this.move();
+    }
+
+    if(params.live_cells > Math.pow(this.brain.length,2) * 0.4){
+        game.world.entities.push(new Entity({
+            life: true,
+            sprites: [1,2],
+            x: this.pos.x,
+            y: this.pos.y
+        }));
     }
 };
 Entity.prototype.distance_to = function(params){
@@ -557,7 +628,7 @@ Entity.prototype.distance_to = function(params){
     return Math.sqrt( xs + ys )<<0;
 };
 Entity.prototype.move = function(){
-    var dir = (Math.random()*12)<<0;
+    var dir = (Math.random()*4)<<0;
 
     if(this.life && this.last_move < game.timer){
         switch(dir){
@@ -565,28 +636,36 @@ Entity.prototype.move = function(){
                 if(this.distance_to({
                     x:game.world.center.x - 1,
                     y:game.world.center.y }) < game.settings.max_distance) {
-                    this.pos.x++;
+                    if(!game.bacteria_in_this_space(this.pos.x+1,this.pos.y)){
+                        this.pos.x++;
+                    }
                 }
             break;
             case 1:
                 if(this.distance_to({
                     x:game.world.center.x + 1,
                     y:game.world.center.y }) < game.settings.max_distance) {
-                    this.pos.x--;
+                    if(!game.bacteria_in_this_space(this.pos.x-1,this.pos.y)){
+                        this.pos.x--;
+                    }
                 }
             break;
             case 2:
                 if(this.distance_to({
                     x:game.world.center.x,
                     y:game.world.center.y - 1 }) < game.settings.max_distance) {
-                    this.pos.y++;
+                    if(!game.bacteria_in_this_space(this.pos.x,this.pos.y+1)){
+                        this.pos.y++;
+                    }
                 }
             break;
             case 3:
                 if(this.distance_to({
                     x:game.world.center.x,
                     y:game.world.center.y + 1 }) < game.settings.max_distance) {
-                    this.pos.y--;
+                    if(!game.bacteria_in_this_space(this.pos.x,this.pos.y-1)){
+                        this.pos.y--;
+                    }
                 }
             break;
         }
@@ -622,6 +701,7 @@ var game = {
     gfx: new Gfx(),
     gui: new Gui(),
     input: new Input(),
+    moog: new Moog(),
 
     fps: 0,
     state: 'loading',
@@ -697,6 +777,14 @@ var game = {
 
     inc_timer: function(){
         game.timer++;
+        if(
+            !game.pause &&
+            game.timer % 10 == 0 &&
+            game.count_bacterias()>0 &&
+            game.brain_cells < 99
+        ){
+            game.brain_cells++;
+        }
     },
 
     new_game: function(){
@@ -718,6 +806,19 @@ var game = {
         return total;
     },
 
+    bacteria_in_this_space: function(x,y){
+        for(key in this.world.entities){
+            if(
+                this.world.entities[key].life &&
+                this.world.entities[key].pos.x === x &&
+                this.world.entities[key].pos.y === y
+            ){
+                return true;
+            }
+        }
+        return false;
+    },
+
     select_bacteria: function(){
         var entity, e,
             p = {
@@ -726,7 +827,13 @@ var game = {
             };
 
         if(this.gui.button_clicked(p.x,p.y)){
-            // clicked on pause
+            this.moog.play({
+                freq: 500,
+                attack: 10,
+                decay: 40,
+                oscilator: 1,
+                vol: 0.2
+            });
         }else
         if(
             this.selected_bacteria &&
@@ -737,25 +844,55 @@ var game = {
         ){
             p.x = p.x - game.settings.brain.pos.x - 1
             p.y = p.y - game.settings.brain.pos.y - 1
-            if(this.brain_cells>0){
+            if(this.selected_bacteria.life && this.brain_cells > 0){
                 if(!this.selected_bacteria.brain[p.x][p.y]){
                     this.selected_bacteria.brain[p.x][p.y] = true;
                     this.brain_cells--;
+                    this.moog.play({
+                        freq: 250,
+                        attack: 10,
+                        decay: 40,
+                        oscilator: 1,
+                        vol: 0.2
+                    });
                 }
             }else{
-                // you do not have brain cells!
+               this.moog.play({
+                    freq: 50,
+                    attack: 10,
+                    decay: 40,
+                    oscilator: 1,
+                    vol: 0.2
+                });
             }
         }else{
             this.selected_bacteria = false;
             for (entity in this.world.entities) {
                 e = this.world.entities[entity];
                 e.selected = false;
-                if(e.pos.x === p.x && e.pos.y === p.y ){
-                        e.selected = true;
-                        this.selected_bacteria = e;
+                if(e.pos.x === p.x && e.pos.y === p.y && e.life){
+                    e.selected = true;
+                    this.selected_bacteria = e;
+                    this.moog.play({
+                        freq: 1000,
+                        attack: 10,
+                        decay: 40,
+                        oscilator: 1,
+                        vol: 0.2
+                    });
                 }
             };
+            if(!this.selected_bacteria){
+                this.moog.play({
+                    freq: 30,
+                    attack: 10,
+                    decay: 40,
+                    oscilator: 1,
+                    vol: 0.2
+                });
+            }
         }
+
         this.gfx.layers[2].render = true;
     },
 
@@ -779,9 +916,8 @@ var game = {
 
                 for (entity in this.world.entities) {
                     e = this.world.entities[entity];
-                    if(!this.pause){
+                    if(!this.pause && e.life){
                         e.gol();
-                        e.move();
                     }
                     e.animate();
                 };
@@ -825,19 +961,34 @@ var game = {
                     this.gfx.clear(1);
                     for (entity in this.world.entities) {
                         e = this.world.entities[entity];
-                        this.gfx.put_tile({
-                            layer:1,
-                            id:e.sprites[e.frame],
-                            x:e.pos.x * this.gfx.screen.sprite_size,
-                            y:e.pos.y * this.gfx.screen.sprite_size,
-                            pixel_perfect:true
-                        });
-                        if(e.selected){
+                        if(!e.life){
                             this.gfx.put_tile({
-                                layer:this.gui.layer,
-                                id:5,
-                                x:e.pos.x,y:e.pos.y
+                                layer:1,
+                                id:e.sprites[e.frame],
+                                x:e.pos.x * this.gfx.screen.sprite_size,
+                                y:e.pos.y * this.gfx.screen.sprite_size,
+                                pixel_perfect:true
                             });
+                        }
+                    };
+
+                    for (entity in this.world.entities) {
+                        e = this.world.entities[entity];
+                        if(e.life){
+                            this.gfx.put_tile({
+                                layer:1,
+                                id:e.sprites[e.frame],
+                                x:e.pos.x * this.gfx.screen.sprite_size,
+                                y:e.pos.y * this.gfx.screen.sprite_size,
+                                pixel_perfect:true
+                            });
+                            if(e.selected){
+                                this.gfx.put_tile({
+                                    layer:this.gui.layer,
+                                    id:5,
+                                    x:e.pos.x,y:e.pos.y
+                                });
+                            }
                         }
                     };
                     this.gfx.layers[1].render = true;
