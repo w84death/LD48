@@ -76,7 +76,10 @@ Gfx.prototype.init = function(params){
             ctx: ctx,
             render: false
         });
-        canvas.style.webkitTransform = ' scale('+this.screen.scale+')';
+        canvas.style.webkitTransform = 'scale('+this.screen.scale+')';
+        canvas.style.MozTransform = 'scale('+this.screen.scale+')';
+        canvas.style.msTransform = 'scale('+this.screen.scale+')';
+        canvas.style.transform = 'scale('+this.screen.scale+')';
         document.getElementById('game').appendChild(canvas);
     };
 };
