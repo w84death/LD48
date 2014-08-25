@@ -46,10 +46,16 @@ var Gfx = function(){
         scale: 4,
         sprite_size: 8,
     };
-    this.screen.width = (window.innerWidth/this.screen.scale)<<0;
-    this.screen.height = (window.innerHeight/this.screen.scale)<<0;
-    this.tileset = [];
-    this.tileset_ids = [];
+    var game_div = document.getElementById('game'),
+        real_width = window.innerWidth > 1024 ? 1024 : window.innerWidth,
+        real_height = window.innerHeight > 768 ? 768 : window.innerHeight;
+
+    game_div.style.width = real_width + 'px';
+    game_div.style.height = real_height + 'px';
+    this.screen.width = (real_width/this.screen.scale)<<0;
+    this.screen.height = (real_height/this.screen.scale)<<0;
+
+
 };
 Gfx.prototype.init = function(params){
     this.loaded = 0;
@@ -94,7 +100,6 @@ Gfx.prototype.load = function(){
         if (this.sprites.hasOwnProperty(key)) size++;
     }
     if(this.loaded >= size){
-        game.gfx.init_tileset();
         return true;
     }
     return false;
@@ -105,14 +110,6 @@ Gfx.prototype.clear = function(layer){
         this.screen.width*this.screen.scale,
         this.screen.height*this.screen.scale
     );
-};
-Gfx.prototype.init_tileset = function(){
-
-   for (var y = 0; y < this.sprites.tileset.width/this.screen.sprite_size; y++) {
-        for (var x = 0; x < this.sprites.tileset.height/this.screen.sprite_size; x++) {
-            this.tileset_ids.push({x:x,y:y});
-        }
-    }
 };
 Gfx.prototype.draw_tileset = function(){
     for (var i = 0; i < this.tileset_ids.length; i++) {
@@ -258,6 +255,22 @@ Gui.prototype.draw_intro = function(params){
             (_h*0.5 << 0) + 84
         );
     }
+};
+Gui.prototype.draw_loading = function(params){
+    var ctx = game.gfx.layers[this.layer].ctx,
+        _w = game.gfx.screen.width*game.gfx.screen.scale,
+        _h = game.gfx.screen.height*game.gfx.screen.scale;
+
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = "900 "+(4*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
+    ctx.strokeStyle = '#fff';
+
+    ctx.fillText('LOADING GAME..',
+        _w*0.5 << 0,
+        _h*0.5 << 0
+    );
 };
 Gui.prototype.draw_game_over = function(){
     var ctx = game.gfx.layers[this.layer].ctx,
@@ -601,10 +614,11 @@ var Input = function(){
     };
 };
 Input.prototype.init = function(){
-    document.body.addEventListener('mousedown', this.enable_pointer, false);
-    document.body.addEventListener('mouseup', this.disable_pointer, false);
-    document.body.addEventListener('mousemove', this.track_pointer, false);
-    document.body.addEventListener("contextmenu", function(e){
+    var game_div = document.getElementById('game');
+    game_div.addEventListener('mousedown', this.enable_pointer, false);
+    game_div.addEventListener('mouseup', this.disable_pointer, false);
+    game_div.addEventListener('mousemove', this.track_pointer, false);
+    game_div.addEventListener("contextmenu", function(e){
         e.preventDefault();
     }, false);
 };
@@ -619,14 +633,17 @@ Input.prototype.enable_pointer = function(e){
         y = e.pageY;
     }
     game.input.pointer.enable = true;
-    game.select_bacteria();
+    game.select_bacterium();
 };
 Input.prototype.disable_pointer = function(){
     game.input.pointer.enable = false;
 };
 Input.prototype.track_pointer = function(e){
     e.preventDefault();
-    var x,y;
+    var x,y, bounds = this.getBoundingClientRect(),
+        sx = bounds.left,
+        sy = bounds.top;
+
     if(e.touches){
         x = e.touches[0].pageX;
         y = e.touches[0].pageY;
@@ -634,8 +651,8 @@ Input.prototype.track_pointer = function(e){
         x = e.pageX;
         y = e.pageY;
     }
-    game.input.pointer.pos.x = x;
-    game.input.pointer.pos.y = y;
+    game.input.pointer.pos.x = x - sx;
+    game.input.pointer.pos.y = y - sy;
 };
 
 
@@ -1060,7 +1077,7 @@ var game = {
 
             this.messages.add_conversation({
                 bubbles: [
-                    ['Let\s play!']
+                    ['Let\'s play!']
                 ],
                 pos: {
                     x: x,
@@ -1113,7 +1130,7 @@ var game = {
                 }
             }
         };
-        console.log(free_space)
+
         if(free_space.length > 0){
             r = Math.random(free_space.length-1)<<0;
 
@@ -1133,7 +1150,7 @@ var game = {
         }
     },
 
-    select_bacteria: function(){
+    select_bacterium: function(){
         var entity, e,
             p = {
                 x: (this.input.pointer.pos.x/this.gfx.screen.sprite_size/this.gfx.screen.scale)<<0,
@@ -1204,10 +1221,12 @@ var game = {
                     oscilator: 1,
                     vol: 0.2
                 });
+                this.gfx.clear(2);
+            }else{
+                this.gfx.layers[2].render = true;
             }
         }
 
-        this.gfx.layers[2].render = true;
     },
 
     update: function(delta_time){
@@ -1260,6 +1279,7 @@ var game = {
 
         switch(this.state){
             case 'loading':
+                this.gui.draw_loading();
             break;
             case 'intro':
                 if(this.gfx.layers[0].render){
@@ -1314,22 +1334,19 @@ var game = {
                 }
                 if(this.selected_bacteria){
                     if(this.gfx.layers[2].render){
-                        this.gfx.clear(2);
                         this.gui.draw_bacteria_brain();
-                        for (x = 0; x < game.settings.brain.size; x++) {
-                            for (y = 0; y < game.settings.brain.size; y++) {
-                                game.gfx.put_tile({
-                                    layer: 2,
-                                    id:this.selected_bacteria.brain[x][y] ? 15 : 14,
-                                    x: x + this.settings.brain.pos.x + 1,
-                                    y: y + this.settings.brain.pos.y + 1
-                                })
-                            }
-                        }
                         this.gfx.layers[2].render = false;
                     }
-                }else{
-                    this.gfx.clear(2);
+                    for (x = 0; x < game.settings.brain.size; x++) {
+                        for (y = 0; y < game.settings.brain.size; y++) {
+                            game.gfx.put_tile({
+                                layer: 2,
+                                id:this.selected_bacteria.brain[x][y] ? 15 : 14,
+                                x: x + this.settings.brain.pos.x + 1,
+                                y: y + this.settings.brain.pos.y + 1
+                            })
+                        }
+                    }
                 }
 
                 this.gui.draw_aside();
