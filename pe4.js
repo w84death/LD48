@@ -127,7 +127,7 @@ Gfx.prototype.put_tile = function(params){
     _w = this.sprites.tileset.width / this.screen.sprite_size,
     _h = this.sprites.tileset.height / this.screen.sprite_size;
 
-    if(params.id > _w){
+    if(params.id >= _w){
         sx = params.id % _w;
         sy = (params.id/_w)<<0;
     }else{
@@ -190,8 +190,8 @@ Gui.prototype.draw_logo = function(params){
         sy = params.y * game.gfx.screen.scale * game.gfx.screen.sprite_size;
 
     if(params.center){
-        sx -= game.gfx.sprites.logo.width * 0.5 * game.gfx.screen.scale;
-        sy -= game.gfx.sprites.logo.height * 0.5 * game.gfx.screen.scale;
+        sx -= ((game.gfx.sprites.logo.width * 0.5)<<0) * game.gfx.screen.scale;
+        sy -= ((game.gfx.sprites.logo.height * 0.5)<<0) * game.gfx.screen.scale;
     }
 
     game.gfx.layers[this.layer].ctx.drawImage(
@@ -260,38 +260,47 @@ Gui.prototype.draw_intro = function(params){
     }
 };
 Gui.prototype.draw_game_over = function(){
-    var ctx = game.gfx.layers[this.layer].ctx;
+    var ctx = game.gfx.layers[this.layer].ctx,
+        _w = game.gfx.screen.width*game.gfx.screen.scale,
+        _h = game.gfx.screen.height*game.gfx.screen.scale;
 
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
-    ctx.font = "900 11px 'Source Code Pro', monospace,serif";
     ctx.strokeStyle = '#fff';
 
-    ctx.drawImage(game.gfx.sprites.logo,
-        (game.gfx.screen.width*0.5 << 0)-(game.gfx.sprites.logo.width*0.5),
-        ((game.gfx.screen.height*0.5 << 0)-(game.gfx.sprites.logo.height*0.5))-20
-    );
+    this.draw_logo({
+        x:(game.world.width*0.5 << 0),
+        y:(game.world.height*0.5 << 0)-2,
+        center: true
+    });
 
     ctx.beginPath();
-    ctx.moveTo(24,(game.gfx.screen.height*0.5 << 0));
-    ctx.lineTo(game.gfx.screen.width-24,(game.gfx.screen.height*0.5 << 0));
+    ctx.moveTo(24,(_h*0.5 << 0)-12);
+    ctx.lineTo(_w-24,(_h*0.5 << 0)-12);
     ctx.stroke();
+
+
+    ctx.font = "900 "+(9*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
+
+
 
     ctx.fillText('GAME OVER',
-        (game.gfx.screen.width*0.5 << 0 ) * game.gfx.screen.scale,
-        ((game.gfx.screen.height*0.5 << 0)+18)*game.gfx.screen.scale
+        _w*0.5 << 0,
+        (_h*0.5 << 0)+42
     );
 
     ctx.beginPath();
-    ctx.moveTo(24,(game.gfx.screen.height*0.5 << 0) + 36);
-    ctx.lineTo(game.gfx.screen.width-24,(game.gfx.screen.height*0.5 << 0) + 36);
+    ctx.moveTo(24,(_h*0.5 << 0)+ 56);
+    ctx.lineTo(_w-24,(_h*0.5 << 0)+ 56);
     ctx.stroke();
+
+    ctx.font = "900 "+(5*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
 
     if(game.timer % 2 == 1){
         ctx.fillText('CLICK TO START',
-            game.gfx.screen.width*0.5 << 0,
-            (game.gfx.screen.height*0.5 << 0) + 54
+            _w*0.5 << 0,
+            (_h*0.5 << 0) + 84
         );
     }
 };
@@ -508,7 +517,7 @@ Messages.prototype.draw_message = function(params){
         }
     };
     longest_line = ctx.measureText(params.msg[longest_line]).width;
-    console.log(longest_line)
+
     width = ((longest_line/game.gfx.screen.sprite_size/game.gfx.screen.scale)<<0 )+2;
     height = i+1;
     if(width<2) width = 2;
