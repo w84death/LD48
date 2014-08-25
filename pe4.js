@@ -48,6 +48,8 @@ var Gfx = function(){
     };
     this.screen.width = (window.innerWidth/this.screen.scale)<<0;
     this.screen.height = (window.innerHeight/this.screen.scale)<<0;
+    this.tileset = [];
+    this.tileset_ids = [];
 };
 Gfx.prototype.init = function(params){
     this.loaded = 0;
@@ -68,18 +70,21 @@ Gfx.prototype.init = function(params){
 
     for (var i = 0; i < params.layers; i++) {
         var canvas = document.createElement('canvas');
-        canvas.width = this.screen.width;
-        canvas.height = this.screen.height;
+        canvas.width = this.screen.width*this.screen.scale;
+        canvas.height = this.screen.height*this.screen.scale;
+
         var ctx = canvas.getContext("2d");
+        ctx.mozImageSmoothingEnabled = false;
+        ctx.webkitImageSmoothingEnabled = false;
+        ctx.msImageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = false;
+
         this.layers.push({
             canvas: canvas,
             ctx: ctx,
             render: false
         });
-        canvas.style.webkitTransform = 'scale('+this.screen.scale+')';
-        canvas.style.MozTransform = 'scale('+this.screen.scale+')';
-        canvas.style.msTransform = 'scale('+this.screen.scale+')';
-        canvas.style.transform = 'scale('+this.screen.scale+')';
+
         document.getElementById('game').appendChild(canvas);
     };
 };
@@ -97,33 +102,20 @@ Gfx.prototype.load = function(){
 Gfx.prototype.clear = function(layer){
     this.layers[layer].ctx.clearRect(
         0, 0,
-        this.screen.width, this.screen.height
+        this.screen.width*this.screen.scale,
+        this.screen.height*this.screen.scale
     );
 };
 Gfx.prototype.init_tileset = function(){
-    var canvas = document.createElement('canvas');
-    canvas.width = this.sprites.tileset.width;
-    canvas.height = this.sprites.tileset.height;
-    var ctx = canvas.getContext("2d");
 
-    ctx.drawImage(this.sprites.tileset,0,0);
-
-    this.tileset = [];
-    for (var y = 0; y < canvas.height/this.screen.sprite_size; y++) {
-        for (var x = 0; x < canvas.width/this.screen.sprite_size; x++) {
-            this.tileset.push(
-                ctx.getImageData(
-                    game.gfx.screen.sprite_size * x,
-                    game.gfx.screen.sprite_size * y,
-                    game.gfx.screen.sprite_size,
-                    game.gfx.screen.sprite_size
-                )
-            );
+   for (var y = 0; y < this.sprites.tileset.width/this.screen.sprite_size; y++) {
+        for (var x = 0; x < this.sprites.tileset.height/this.screen.sprite_size; x++) {
+            this.tileset_ids.push({x:x,y:y});
         }
     }
 };
 Gfx.prototype.draw_tileset = function(){
-    for (var i = 0; i < this.tileset.length; i++) {
+    for (var i = 0; i < this.tileset_ids.length; i++) {
         this.put_tile({
             id:i, x:i, y:0, layer:1
         });
@@ -131,10 +123,28 @@ Gfx.prototype.draw_tileset = function(){
     };
 };
 Gfx.prototype.put_tile = function(params){
-    this.layers[params.layer].ctx.putImageData(
-        this.tileset[params.id],
-        params.x * (params.pixel_perfect? 1 : this.screen.sprite_size),
-        params.y * (params.pixel_perfect? 1 : this.screen.sprite_size)
+    var sx,sy,
+    _w = this.sprites.tileset.width / this.screen.sprite_size,
+    _h = this.sprites.tileset.height / this.screen.sprite_size;
+
+    if(params.id > _w){
+        sx = params.id % _w;
+        sy = (params.id/_w)<<0;
+    }else{
+        sx = params.id;
+        sy = 0;
+    }
+
+    this.layers[params.layer].ctx.drawImage(
+        this.sprites.tileset,
+        sx*this.screen.sprite_size,
+        sy*this.screen.sprite_size,
+        this.screen.sprite_size,
+        this.screen.sprite_size,
+        params.x*this.screen.sprite_size*this.screen.scale,
+        params.y*this.screen.sprite_size*this.screen.scale,
+        this.screen.sprite_size*this.screen.scale,
+        this.screen.sprite_size*this.screen.scale
     );
 };
 
@@ -171,64 +181,81 @@ Gui.prototype.zeros = function(num, size) {
 Gui.prototype.clear = function(){
     game.gfx.layers[this.layer].ctx.clearRect(
         0, 0,
-        game.gfx.screen.width, game.gfx.screen.height
+        game.gfx.screen.width*game.gfx.screen.scale,
+        game.gfx.screen.height*game.gfx.screen.scale
     );
 };
 Gui.prototype.draw_logo = function(params){
+    var sx = params.x * game.gfx.screen.scale * game.gfx.screen.sprite_size,
+        sy = params.y * game.gfx.screen.scale * game.gfx.screen.sprite_size;
+
+    if(params.center){
+        sx -= game.gfx.sprites.logo.width * 0.5 * game.gfx.screen.scale;
+        sy -= game.gfx.sprites.logo.height * 0.5 * game.gfx.screen.scale;
+    }
+
     game.gfx.layers[this.layer].ctx.drawImage(
         game.gfx.sprites.logo,
-        (params.x*game.gfx.screen.sprite_size)-(game.gfx.sprites.logo.width*0.5),
-        (params.y*game.gfx.screen.sprite_size)-(game.gfx.sprites.logo.height*0.5)
+        0,0,
+        game.gfx.sprites.logo.width,
+        game.gfx.sprites.logo.height,
+        sx,
+        sy,
+        game.gfx.sprites.logo.width * game.gfx.screen.scale,
+        game.gfx.sprites.logo.height * game.gfx.screen.scale
     );
 };
 Gui.prototype.draw_intro = function(params){
-    var ctx = game.gfx.layers[this.layer].ctx;
+    var ctx = game.gfx.layers[this.layer].ctx,
+        _w = game.gfx.screen.width*game.gfx.screen.scale,
+        _h = game.gfx.screen.height*game.gfx.screen.scale;
 
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
-    ctx.font = "900 11px 'Source Code Pro', monospace,serif";
+    ctx.font = "900 "+(4*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
     ctx.strokeStyle = '#fff';
 
     ctx.fillText('P1X PRESENTS',
-        game.gfx.screen.width*0.5 << 0,
-        (game.gfx.screen.height*0.5 << 0) - 36
+        _w*0.5 << 0,
+        (_h*0.5 << 0) - 136
     );
 
-    ctx.drawImage(game.gfx.sprites.logo,
-        (game.gfx.screen.width*0.5 << 0)-(game.gfx.sprites.logo.width*0.5),
-        ((game.gfx.screen.height*0.5 << 0)-(game.gfx.sprites.logo.height*0.5))-20
-    );
+    this.draw_logo({
+        x:(game.world.width*0.5 << 0),
+        y:(game.world.height*0.5 << 0)-2,
+        center: true
+    });
 
     ctx.beginPath();
-    ctx.moveTo(24,(game.gfx.screen.height*0.5 << 0));
-    ctx.lineTo(game.gfx.screen.width-24,(game.gfx.screen.height*0.5 << 0));
+    ctx.moveTo(24,(_h*0.5 << 0)-12);
+    ctx.lineTo(_w-24,(_h*0.5 << 0)-12);
     ctx.stroke();
 
     ctx.fillText('8X8 SPRITES; 16 COLOUR PALETTE',
-        game.gfx.screen.width*0.5 << 0,
-        (game.gfx.screen.height*0.5 << 0)+18
+        (_w*0.5 << 0),
+        (_h*0.5 << 0)+18
     );
 
     game.gfx.layers[this.layer].ctx.fillText('P1X ENGINE V4; HTTP://P1X.IN',
-        game.gfx.screen.width*0.5 << 0,
-        (game.gfx.screen.height*0.5 << 0)+32
+        (_w*0.5 << 0),
+        (_h*0.5 << 0)+32
     );
 
     ctx.fillText('@W84DEATH',
-        game.gfx.screen.width*0.5 << 0,
-        (game.gfx.screen.height*0.5 << 0)+48
+        (_w*0.5 << 0),
+        (_h*0.5 << 0)+48
     );
 
     ctx.beginPath();
-    ctx.moveTo(24,(game.gfx.screen.height*0.5 << 0) + 56);
-    ctx.lineTo(game.gfx.screen.width-24,(game.gfx.screen.height*0.5 << 0) + 56);
+    ctx.moveTo(24,(_h*0.5 << 0)+ 56);
+    ctx.lineTo(_w-24,(_h*0.5 << 0)+ 56);
     ctx.stroke();
 
     if(game.timer % 2 == 1){
         ctx.fillText('CLICK TO START',
-            game.gfx.screen.width*0.5 << 0,
-            (game.gfx.screen.height*0.5 << 0) + 74
+            _w*0.5 << 0,
+            (_h*0.5 << 0) + 84
         );
     }
 };
@@ -252,8 +279,8 @@ Gui.prototype.draw_game_over = function(){
     ctx.stroke();
 
     ctx.fillText('GAME OVER',
-        game.gfx.screen.width*0.5 << 0,
-        (game.gfx.screen.height*0.5 << 0)+18
+        (game.gfx.screen.width*0.5 << 0 ) * game.gfx.screen.scale,
+        ((game.gfx.screen.height*0.5 << 0)+18)*game.gfx.screen.scale
     );
 
     ctx.beginPath();
@@ -270,30 +297,23 @@ Gui.prototype.draw_game_over = function(){
 };
 Gui.prototype.draw_fps = function(){
     var ctx = game.gfx.layers[this.layer].ctx;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(
-        game.gfx.screen.width-(7*game.gfx.screen.sprite_size),
-        game.gfx.screen.height-(2*game.gfx.screen.sprite_size),
-        game.gfx.screen.sprite_size*6,
-        game.gfx.screen.sprite_size);
-    ctx.fillStyle = '#fff';
-    ctx.font = "900 9px 'Source Code Pro', monospace,serif";
+    ctx.font = "900 "+(5* game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'right';
     ctx.fillText('FPS '+game.fps,
-        game.gfx.screen.width-game.gfx.screen.sprite_size-2,
-        game.gfx.screen.height-game.gfx.screen.sprite_size+1
+        (game.world.width  - 2) * game.gfx.screen.scale * game.gfx.screen.sprite_size,
+        (game.world.height  -1 ) * game.gfx.screen.scale * game.gfx.screen.sprite_size
     );
 };
 Gui.prototype.draw_pointer = function(){
-    var x = (game.input.pointer.pos.x / game.gfx.screen.scale) << 0,
-        y = (game.input.pointer.pos.y / game.gfx.screen.scale) << 0;
+    var x = (game.input.pointer.pos.x ) << 0,
+        y = (game.input.pointer.pos.y ) << 0;
 
     game.gfx.layers[this.layer].ctx.drawImage(
         game.gfx.sprites.pointer,
         game.input.pointer.enable? 8 : 0, // x cut
         0, // y cut
-        8,8,x,y,8,8 // cut size, position, sprite size
+        8,8,x,y,8*game.gfx.screen.scale,8*game.gfx.screen.scale // cut size, position, sprite size
     );
 };
 Gui.prototype.draw_bacteria_brain = function(){
@@ -438,21 +458,21 @@ Gui.prototype.draw_aside = function(){
 
 
     ctx.fillStyle = '#fff';
-    ctx.font = "900 9px 'Source Code Pro', monospace,serif";
+    ctx.font = "900 "+(7*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
     ctx.fillText(this.zeros(game.count_bacterias(),2) + 'x',
-        game.gfx.screen.sprite_size * (x + 1),
-        game.gfx.screen.sprite_size * (y + 2)
+        game.gfx.screen.sprite_size * game.gfx.screen.scale * (x + 1),
+        game.gfx.screen.sprite_size * game.gfx.screen.scale *(y + 2)
     );
 
     ctx.fillStyle = '#fff';
-    ctx.font = "900 9px 'Source Code Pro', monospace,serif";
+    ctx.font = "900 "+(7*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
     ctx.fillText(this.zeros(game.brain_cells,2) + 'x',
-        game.gfx.screen.sprite_size * (x + 1),
-        game.gfx.screen.sprite_size * (y + 3)
+        game.gfx.screen.sprite_size * game.gfx.screen.scale * (x + 1),
+        game.gfx.screen.sprite_size * game.gfx.screen.scale * (y + 3)
     );
 };
 
@@ -472,15 +492,24 @@ Messages.prototype.init = function(params){
 };
 Messages.prototype.draw_message = function(params){
     var ctx = game.gfx.layers[this.layer].ctx,
-        tile = 0, corner = {}, max_len = 0, len = 0,
+        tile = 0, corner = {}, max_len = 0, len = 0, longest_line,
         width, height, i,x,y;
+
+    ctx.fillStyle = '#000';
+    ctx.font = "900 "+(5*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
 
     for (i = 0; i < params.msg.length; i++) {
         len = params.msg[i].length;
-        if(len > max_len) max_len = len;
+        if(len > max_len) {
+            max_len = len;
+            longest_line = i;
+        }
     };
-
-    width = (((max_len/7.5)*4.8)<<0 )+1;
+    longest_line = ctx.measureText(params.msg[longest_line]).width;
+    console.log(longest_line)
+    width = ((longest_line/game.gfx.screen.sprite_size/game.gfx.screen.scale)<<0 )+2;
     height = i+1;
     if(width<2) width = 2;
 
@@ -502,14 +531,11 @@ Messages.prototype.draw_message = function(params){
         ]
     });
 
-    ctx.fillStyle = '#000';
-    ctx.font = "900 8px 'Source Code Pro', monospace,serif";
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
+
     for (var i = 0; i < params.msg.length; i++) {
         ctx.fillText(params.msg[i],
-            corner.x*game.gfx.screen.sprite_size + 3,
-            (corner.y+i)*game.gfx.screen.sprite_size + 2
+            (corner.x*game.gfx.screen.sprite_size + 5 )*game.gfx.screen.scale ,
+            ((corner.y+i)*game.gfx.screen.sprite_size + 4)*game.gfx.screen.scale
         );
     };
 };
@@ -1220,9 +1246,8 @@ var game = {
                             this.gfx.put_tile({
                                 layer:1,
                                 id:e.sprites[e.frame],
-                                x:e.pos.x * this.gfx.screen.sprite_size,
-                                y:e.pos.y * this.gfx.screen.sprite_size,
-                                pixel_perfect:true
+                                x:e.pos.x,
+                                y:e.pos.y
                             });
                         }
                     };
@@ -1233,9 +1258,8 @@ var game = {
                             this.gfx.put_tile({
                                 layer:1,
                                 id:e.sprites[e.frame],
-                                x:e.pos.x * this.gfx.screen.sprite_size,
-                                y:e.pos.y * this.gfx.screen.sprite_size,
-                                pixel_perfect:true
+                                x:e.pos.x,
+                                y:e.pos.y
                             });
                             if(e.selected){
                                 this.gfx.put_tile({
@@ -1271,7 +1295,7 @@ var game = {
                 this.gui.draw_aside();
                 this.gui.draw_buttons();
                 this.gui.draw_fps();
-                this.gui.draw_logo({x:5,y:this.world.height-2});
+                this.gui.draw_logo({x:1,y:this.world.height-3});
                 this.messages.draw_conversation();
             break;
             case 'game_over':
