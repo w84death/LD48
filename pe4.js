@@ -467,19 +467,19 @@ Gui.prototype.draw_aside = function(){
 
 
     ctx.fillStyle = '#fff';
-    ctx.font = "900 "+(7*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
+    ctx.font = "900 "+(6*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.fillText(this.zeros(game.count_bacterias(),2) + 'x',
+    ctx.fillText(this.zeros(game.count_bacteria(),3) + 'x',
         game.gfx.screen.sprite_size * game.gfx.screen.scale * (x + 1),
         game.gfx.screen.sprite_size * game.gfx.screen.scale *(y + 2)
     );
 
     ctx.fillStyle = '#fff';
-    ctx.font = "900 "+(7*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
+    ctx.font = "900 "+(6*game.gfx.screen.scale)+"px 'Source Code Pro', monospace,serif";
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.fillText(this.zeros(game.brain_cells,2) + 'x',
+    ctx.fillText(this.zeros(game.brain_cells,3) + 'x',
         game.gfx.screen.sprite_size * game.gfx.screen.scale * (x + 1),
         game.gfx.screen.sprite_size * game.gfx.screen.scale * (y + 3)
     );
@@ -781,18 +781,9 @@ Entity.prototype.brain_interpreter = function(params){
     }
 
     if(params.live_cells > Math.pow(this.brain.length,2) * 0.4){
-        game.world.entities.push(new Entity({
-            life: true,
-            sprites: [1,2],
-            x: this.pos.x,
-            y: this.pos.y
-        }));
-        game.moog.play({
-            freq: 220,
-            attack: 80,
-            decay: 400,
-            oscilator: 3,
-            vol: 0.2
+        game.born_new_bacterium({
+            x:this.pos.x,
+            y:this.pos.y
         });
     }
 };
@@ -964,7 +955,7 @@ var game = {
         if(
             !game.pause &&
             game.timer % 10 == 0 &&
-            game.count_bacterias()>0 &&
+            game.count_bacteria()>0 &&
             game.brain_cells < 99
         ){
             game.brain_cells++;
@@ -998,9 +989,10 @@ var game = {
                 bubbles: [
 
                     ['Welcome!',
-                    'I\'m a bacteria.'],
+                    'We are the bacteria.',
+                    'Resistance is futile.'],
 
-                    ['You can program my brain',
+                    ['You can program our brains',
                     'by simple binary rules.'],
 
                     ['Select one of us.'],
@@ -1044,7 +1036,7 @@ var game = {
             this.messages.add_conversation({
                 bubbles: [
                     ['Here You can see how many',
-                    'bacterias are alive.']
+                    'bacteria are alive.']
                 ],
                 pos: {
                     x: this.world.width - 5,
@@ -1081,7 +1073,7 @@ var game = {
         }
     },
 
-    count_bacterias: function(){
+    count_bacteria: function(){
         var total = 0, key;
         for(key in this.world.entities){
             if(this.world.entities[key].life) total++;
@@ -1100,6 +1092,45 @@ var game = {
             }
         }
         return false;
+    },
+
+    born_new_bacterium: function(params){
+        var x,y,r,free_space = [];
+
+        for (x = params.x-1; x < params.x+1; x++) {
+            for (y = params.y-1; y < params.y+1; y++) {
+                if(
+                    x > 0 &&
+                    x < this.world.width &&
+                    y > 0 &&
+                    y < this.world.height &&
+                    this.bacteria_in_this_space(x,y)
+                ){
+                    free_space.push({
+                        x: x,
+                        y: y
+                    });
+                }
+            }
+        };
+        console.log(free_space)
+        if(free_space.length > 0){
+            r = Math.random(free_space.length-1)<<0;
+
+            game.world.entities.push(new Entity({
+                life: true,
+                sprites: [1,2],
+                x: free_space[r].x,
+                y: free_space[r].y
+            }));
+            game.moog.play({
+                freq: 220,
+                attack: 80,
+                decay: 400,
+                oscilator: 3,
+                vol: 0.2
+            });
+        }
     },
 
     select_bacteria: function(){
@@ -1205,7 +1236,7 @@ var game = {
                     e.animate();
                 };
 
-                if(this.count_bacterias() === 0){
+                if(this.count_bacteria() === 0){
                     this.world.entities = [];
                     this.gfx.layers[1].render = true;
                     this.pause = true;
